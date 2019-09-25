@@ -1,0 +1,18 @@
+name: Glog
+
+on: [ push ]
+
+jobs:
+  build:
+    name: BuildAndTest
+    runs-on: ubuntu-latest
+    startegy:
+      matrix:
+        go: [ '1.x' ]
+    steps:
+      - uses: actions/checkout@master
+      - name: Build Glog
+        uses: actions/setup-go@v1
+        with:
+          go-version: ${{ matrix.go }}
+      - run: go build *.go
