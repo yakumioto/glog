@@ -6,16 +6,17 @@ import (
 	"os"
 	"path"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 )
 
-var std = &Logger{out: os.Stderr, level: LevelInfo, depth: 3}
-
 type Level int
 
 const (
-	LevelError Level = iota
+	levelPanic Level = iota
+	levelFatal
+	LevelError
 	LevelWarning
 	LevelInfo
 	LevelDebug
@@ -24,7 +25,10 @@ const (
 )
 
 var (
-	levelNames = []string{
+	globalID  uint64 = 0
+	levelName        = [...]string{
+		"PANI",
+		"FATA",
 		"ERRO",
 		"WARN",
 		"INFO",
@@ -32,12 +36,14 @@ var (
 	}
 )
 
+var std = &Logger{id: &globalID, out: os.Stderr, level: LevelInfo, depth: 3}
+
 func (l Level) String() string {
-	return levelNames[l]
+	return levelName[l]
 }
 
 type Logger struct {
-	id     uint64
+	id     *uint64
 	mu     sync.Mutex
 	depth  int
 	level  Level
@@ -47,10 +53,21 @@ type Logger struct {
 }
 
 func New(out io.Writer, prefix string) *Logger {
-	return &Logger{out: out, prefix: prefix, level: LevelInfo, depth: 2}
+	return &Logger{id: &globalID, out: out, prefix: prefix, level: LevelInfo, depth: 2}
 }
 
 func (l *Logger) formatHeader(buf *[]byte, t time.Time, fname string, level Level) {
+
+	switch level {
+	case levelPanic, levelFatal, LevelError:
+		*buf = append(*buf, "\x1b[0;0;31m"...)
+	case LevelWarning:
+		*buf = append(*buf, "\x1b[0;0;33m"...)
+	case LevelInfo:
+		*buf = append(*buf, "\x1b[0;0;32m"...)
+	case LevelDebug:
+		*buf = append(*buf, "\x1b[0;0;34m"...)
+	}
 
 	*buf = append(*buf, t.Format(timeFormat)...)
 	*buf = append(*buf, ' ')
@@ -73,7 +90,7 @@ func (l *Logger) formatHeader(buf *[]byte, t time.Time, fname string, level Leve
 	*buf = append(*buf, level.String()...)
 	*buf = append(*buf, ' ')
 
-	*buf = append(*buf, fmt.Sprintf("%03x", l.id)...)
+	*buf = append(*buf, fmt.Sprintf("%03x", *l.id)...)
 	*buf = append(*buf, ' ')
 }
 
@@ -84,17 +101,19 @@ func (l *Logger) Output(calldepth int, level Level, s string) error {
 	fname := ""
 	if l.level == LevelDebug {
 		pc, _, _, _ := runtime.Caller(calldepth)
-		fname = path.Base(runtime.FuncForPC(pc).Name())
+		fnames := strings.Split(path.Base(runtime.FuncForPC(pc).Name()), ".")
+		fname = fnames[len(fnames)-1]
 	}
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	l.id++
+	*l.id++
 	l.buf = l.buf[:0]
 	l.formatHeader(&l.buf, now, fname, level)
 
 	l.buf = append(l.buf, s...)
+	l.buf = append(l.buf, "\x1b[0m"...)
 	if len(s) == 0 || s[len(s)-1] != '\n' {
 		l.buf = append(l.buf, '\n')
 	}
@@ -103,158 +122,176 @@ func (l *Logger) Output(calldepth int, level Level, s string) error {
 	return err
 }
 
-func Infoln(v ...interface{}) {
-	std.Infoln(v...)
+func Panicln(format string, v ...interface{}) { std.Panicln(v...) }
+func Fatalln(format string, v ...interface{}) { std.Fatalln(v...) }
+func Erroln(format string, v ...interface{})  { std.Erroln(v...) }
+func Warnln(format string, v ...interface{})  { std.Warnln(v...) }
+func Infoln(format string, v ...interface{})  { std.Infoln(v...) }
+func Debuln(format string, v ...interface{})  { std.Debuln(v...) }
+func Panicf(format string, v ...interface{})  { std.Panicf(format, v...) }
+func Fatalf(format string, v ...interface{})  { std.Fatalf(format, v...) }
+func Errof(format string, v ...interface{})   { std.Errof(format, v...) }
+func Warnf(format string, v ...interface{})   { std.Warnf(format, v...) }
+func Infof(format string, v ...interface{})   { std.Infof(format, v...) }
+func Debuf(format string, v ...interface{})   { std.Debuf(format, v...) }
+
+func (l *Logger) Panicln(v ...interface{}) {
+	s := fmt.Sprintln(v...)
+	l.Output(l.depth, levelPanic, s)
+	panic(s)
 }
 
-func (l *Logger) Infoln(v ...interface{}) {
-	if l.level >= LevelInfo {
-		_ = l.Output(l.depth, LevelInfo, fmt.Sprintln(v...))
-	}
+func (l *Logger) Panicf(format string, v ...interface{}) {
+	s := fmt.Sprintf(format, v...)
+	l.Output(l.depth, levelPanic, s)
+	panic(s)
 }
 
-func Infof(format string, v ...interface{}) {
-	std.Infof(format, v...)
+func (l *Logger) Fatalln(v ...interface{}) {
+	l.Output(l.depth, levelFatal, fmt.Sprintln(v...))
+	os.Exit(1)
 }
 
-func (l *Logger) Infof(format string, v ...interface{}) {
-	if l.level >= LevelInfo {
-		_ = l.Output(l.depth, LevelInfo, fmt.Sprintf(format, v...))
-	}
-}
-
-func Warnln(v ...interface{}) {
-	std.Warnln(v...)
-}
-
-func (l *Logger) Warnln(v ...interface{}) {
-	if l.level >= LevelWarning {
-		_ = l.Output(l.depth, LevelWarning, fmt.Sprintln(v...))
-	}
-}
-
-func Warnf(format string, v ...interface{}) {
-	std.Warnf(format, v...)
-}
-
-func (l *Logger) Warnf(format string, v ...interface{}) {
-	if l.level >= LevelWarning {
-		_ = l.Output(l.depth, LevelWarning, fmt.Sprintf(format, v...))
-	}
-}
-
-func Erroln(v ...interface{}) {
-	std.Erroln(v...)
+func (l *Logger) Fatalf(format string, v ...interface{}) {
+	l.Output(l.depth, levelFatal, fmt.Sprintf(format, v...))
+	os.Exit(1)
 }
 
 func (l *Logger) Erroln(v ...interface{}) {
 	if l.level >= LevelError {
-		_ = l.Output(l.depth, LevelError, fmt.Sprintln(v...))
+		l.Output(l.depth, LevelError, fmt.Sprintln(v...))
 	}
-}
-
-func Errof(format string, v ...interface{}) {
-	std.Errof(format, v...)
 }
 
 func (l *Logger) Errof(format string, v ...interface{}) {
 	if l.level >= LevelError {
-		_ = l.Output(l.depth, LevelError, fmt.Sprintf(format, v...))
+		l.Output(l.depth, LevelError, fmt.Sprintf(format, v...))
 	}
 }
 
-func Debuln(v ...interface{}) {
-	std.Debuln(v...)
+func (l *Logger) Warnln(v ...interface{}) {
+	if l.level >= LevelWarning {
+		l.Output(l.depth, LevelWarning, fmt.Sprintln(v...))
+	}
+}
+
+func (l *Logger) Warnf(format string, v ...interface{}) {
+	if l.level >= LevelWarning {
+		l.Output(l.depth, LevelWarning, fmt.Sprintf(format, v...))
+	}
+}
+
+func (l *Logger) Infoln(v ...interface{}) {
+	if l.level >= LevelInfo {
+		l.Output(l.depth, LevelInfo, fmt.Sprintln(v...))
+	}
+}
+
+func (l *Logger) Infof(format string, v ...interface{}) {
+	if l.level >= LevelInfo {
+		l.Output(l.depth, LevelInfo, fmt.Sprintf(format, v...))
+	}
 }
 
 func (l *Logger) Debuln(v ...interface{}) {
 	if l.level >= LevelDebug {
-		_ = l.Output(l.depth, LevelDebug, fmt.Sprintln(v...))
+		l.Output(l.depth, LevelDebug, fmt.Sprintln(v...))
 	}
-}
-
-func Debuf(format string, v ...interface{}) {
-	std.Debuf(format, v...)
 }
 
 func (l *Logger) Debuf(format string, v ...interface{}) {
 	if l.level >= LevelDebug {
-		_ = l.Output(l.depth, LevelDebug, fmt.Sprintf(format, v...))
+		l.Output(l.depth, LevelDebug, fmt.Sprintf(format, v...))
 	}
 }
 
-func ID() uint64 {
-	return std.ID()
+func MustGetLogger(prefix string) *Logger { return std.MustGetLogger(prefix) }
+func ID() uint64                          { return std.ID() }
+func ResetID()                            { std.ResetID() }
+func SetOutput(w io.Writer)               { std.SetOutput(w) }
+func Prefix() string                      { return std.Prefix() }
+func SetPrefix(prefix string)             { std.SetPrefix(prefix) }
+func GetLevel() string                    { return std.Level() }
+func SetLevel(level Level)                { std.SetLevel(level) }
+
+func (l *Logger) MustGetLogger(prefix string) *Logger {
+
+	if l.prefix != "" {
+		prefix = strings.Join([]string{l.prefix, prefix}, ".")
+	}
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	return &Logger{
+		id:     &globalID,
+		depth:  l.depth,
+		level:  l.level,
+		prefix: prefix,
+		out:    l.out,
+	}
 }
 
 func (l *Logger) ID() uint64 {
+
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return l.id
-}
 
-func ResetID() {
-	std.ResetID()
+	return *l.id
 }
 
 func (l *Logger) ResetID() {
+
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.id = 0
+
+	*l.id = 0
 }
 
 func (l *Logger) Writer() io.Writer {
+
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
 	return l.out
 }
 
-func SetOutput(w io.Writer) {
-	std.SetOutput(w)
-}
-
 func (l *Logger) SetOutput(w io.Writer) {
+
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
 	l.out = w
 }
 
-func Prefix() string {
-	return std.Prefix()
-}
-
 func (l *Logger) Prefix() string {
+
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
 	return l.prefix
 }
 
-func SetPrefix(prefix string) {
-	std.SetPrefix(prefix)
-}
-
 func (l *Logger) SetPrefix(prefix string) {
+
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
 	l.prefix = prefix
 }
 
-func GetLevel() string {
-	return std.Level()
-}
-
 func (l *Logger) Level() string {
+
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
 	return l.level.String()
 }
 
-func SetLevel(level Level) {
-	std.SetLevel(level)
-}
-
 func (l *Logger) SetLevel(level Level) {
+
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
 	l.level = level
 }
