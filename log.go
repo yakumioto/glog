@@ -21,11 +21,11 @@ const (
 	LevelInfo
 	LevelDebug
 
-	timeFormat = "2006-01-02 15:04:05.999 MST"
+	timeFormat = "2006-01-02 15:04:05.000 MST"
 )
 
 var (
-	globalID  uint64 = 0
+	id        uint64 = 0
 	levelName        = [...]string{
 		"PANI",
 		"FATA",
@@ -36,7 +36,7 @@ var (
 	}
 )
 
-var std = &Logger{id: &globalID, out: os.Stderr, level: LevelInfo, depth: 3}
+var std = &Logger{id: &id, out: os.Stderr, level: LevelInfo, depth: 3}
 
 func (l Level) String() string {
 	return levelName[l]
@@ -53,11 +53,10 @@ type Logger struct {
 }
 
 func New(out io.Writer, prefix string) *Logger {
-	return &Logger{id: &globalID, out: out, prefix: prefix, level: LevelInfo, depth: 2}
+	return &Logger{id: &id, out: out, prefix: prefix, level: LevelInfo, depth: 2}
 }
 
 func (l *Logger) formatHeader(buf *[]byte, t time.Time, fname string, level Level) {
-
 	switch level {
 	case levelPanic, levelFatal, LevelError:
 		*buf = append(*buf, "\x1b[0;0;31m"...)
@@ -95,7 +94,6 @@ func (l *Logger) formatHeader(buf *[]byte, t time.Time, fname string, level Leve
 }
 
 func (l *Logger) Output(calldepth int, level Level, s string) error {
-
 	now := time.Now()
 
 	fname := ""
@@ -113,27 +111,27 @@ func (l *Logger) Output(calldepth int, level Level, s string) error {
 	l.formatHeader(&l.buf, now, fname, level)
 
 	l.buf = append(l.buf, s...)
-	l.buf = append(l.buf, "\x1b[0m"...)
 	if len(s) == 0 || s[len(s)-1] != '\n' {
 		l.buf = append(l.buf, '\n')
 	}
+	l.buf = append(l.buf, "\x1b[0m"...)
 
 	_, err := l.out.Write(l.buf)
 	return err
 }
 
-func Panicln(format string, v ...interface{}) { std.Panicln(v...) }
-func Fatalln(format string, v ...interface{}) { std.Fatalln(v...) }
-func Erroln(format string, v ...interface{})  { std.Erroln(v...) }
-func Warnln(format string, v ...interface{})  { std.Warnln(v...) }
-func Infoln(format string, v ...interface{})  { std.Infoln(v...) }
-func Debuln(format string, v ...interface{})  { std.Debuln(v...) }
-func Panicf(format string, v ...interface{})  { std.Panicf(format, v...) }
-func Fatalf(format string, v ...interface{})  { std.Fatalf(format, v...) }
-func Errof(format string, v ...interface{})   { std.Errof(format, v...) }
-func Warnf(format string, v ...interface{})   { std.Warnf(format, v...) }
-func Infof(format string, v ...interface{})   { std.Infof(format, v...) }
-func Debuf(format string, v ...interface{})   { std.Debuf(format, v...) }
+func Panicln(v ...interface{})               { std.Panicln(v...) }
+func Fatalln(v ...interface{})               { std.Fatalln(v...) }
+func Erroln(v ...interface{})                { std.Erroln(v...) }
+func Warnln(v ...interface{})                { std.Warnln(v...) }
+func Infoln(v ...interface{})                { std.Infoln(v...) }
+func Debuln(v ...interface{})                { std.Debuln(v...) }
+func Panicf(format string, v ...interface{}) { std.Panicf(format, v...) }
+func Fatalf(format string, v ...interface{}) { std.Fatalf(format, v...) }
+func Errof(format string, v ...interface{})  { std.Errof(format, v...) }
+func Warnf(format string, v ...interface{})  { std.Warnf(format, v...) }
+func Infof(format string, v ...interface{})  { std.Infof(format, v...) }
+func Debuf(format string, v ...interface{})  { std.Debuf(format, v...) }
 
 func (l *Logger) Panicln(v ...interface{}) {
 	s := fmt.Sprintln(v...)
@@ -211,11 +209,11 @@ func ResetID()                            { std.ResetID() }
 func SetOutput(w io.Writer)               { std.SetOutput(w) }
 func Prefix() string                      { return std.Prefix() }
 func SetPrefix(prefix string)             { std.SetPrefix(prefix) }
+func Writer() io.Writer                   { return std.Writer() }
 func GetLevel() string                    { return std.Level() }
 func SetLevel(level Level)                { std.SetLevel(level) }
 
 func (l *Logger) MustGetLogger(prefix string) *Logger {
-
 	if l.prefix != "" {
 		prefix = strings.Join([]string{l.prefix, prefix}, ".")
 	}
@@ -224,7 +222,7 @@ func (l *Logger) MustGetLogger(prefix string) *Logger {
 	defer l.mu.Unlock()
 
 	return &Logger{
-		id:     &globalID,
+		id:     &id,
 		depth:  l.depth,
 		level:  l.level,
 		prefix: prefix,
@@ -233,7 +231,6 @@ func (l *Logger) MustGetLogger(prefix string) *Logger {
 }
 
 func (l *Logger) ID() uint64 {
-
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -241,7 +238,6 @@ func (l *Logger) ID() uint64 {
 }
 
 func (l *Logger) ResetID() {
-
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -249,7 +245,6 @@ func (l *Logger) ResetID() {
 }
 
 func (l *Logger) Writer() io.Writer {
-
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -257,7 +252,6 @@ func (l *Logger) Writer() io.Writer {
 }
 
 func (l *Logger) SetOutput(w io.Writer) {
-
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -265,7 +259,6 @@ func (l *Logger) SetOutput(w io.Writer) {
 }
 
 func (l *Logger) Prefix() string {
-
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -273,7 +266,6 @@ func (l *Logger) Prefix() string {
 }
 
 func (l *Logger) SetPrefix(prefix string) {
-
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -281,7 +273,6 @@ func (l *Logger) SetPrefix(prefix string) {
 }
 
 func (l *Logger) Level() string {
-
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -289,7 +280,6 @@ func (l *Logger) Level() string {
 }
 
 func (l *Logger) SetLevel(level Level) {
-
 	l.mu.Lock()
 	defer l.mu.Unlock()
 

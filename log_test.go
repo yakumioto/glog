@@ -2,21 +2,60 @@ package glog
 
 import (
 	"bytes"
-	"log"
+	"fmt"
 	"os"
 	"testing"
 	"time"
 )
 
-func TestOutput(t *testing.T) {
-	const testString = "test"
-	var b bytes.Buffer
-	l := New(&b, "")
-	l.Infof(testString)
+func color(level Level) string {
+	switch level {
+	case levelPanic, levelFatal, LevelError:
+		return "31"
+	case LevelWarning:
+		return "33"
+	case LevelInfo:
+		return "32"
+	case LevelDebug:
+		return "34"
+	default:
+		return ""
+	}
+}
+
+func expectlog(level Level, prefix, fnc string, id int, msg string) string {
+	headFormat := "\x1b[0;0;%sm%s"
+	prefixFormat := " [%s]"
+	fncFormat := " %s"
+	endFormat := " -> %s %03x %s\n\x1b[0m"
 	now := time.Now().Format(timeFormat)
-	expect := "\x1b[0;0;32m" + now + " -> " + "INFO" + " 001 " + testString + "\x1b[0m\n"
-	if b.String() != expect {
-		t.Errorf("log output should match %q is %q", expect, b.String())
+
+	format := headFormat
+	if prefix != "" {
+		format += prefixFormat
+	} else {
+		format += "%s"
+	}
+	if fnc != "" {
+		format += fncFormat
+	} else {
+		format += "%s"
+	}
+	format += endFormat
+
+	return fmt.Sprintf(format, color(level), now, prefix, fnc, level.String(), id, msg)
+}
+
+func mastEqual(t *testing.T, expect, actual string) {
+	if expect == "" && actual == "" {
+		return
+	}
+
+	equalTime := expect[:29] == actual[:29]
+	equalLog := expect[34:] == actual[34:]
+
+	if !equalTime || !equalLog {
+		t.Errorf("log output should match\nactual: %s\nexpect: %s", actual, expect)
 	}
 }
 
@@ -30,212 +69,209 @@ func TestPrefixAndLevelSetting(t *testing.T) {
 	if GetLevel() != LevelDebug.String() {
 		t.Errorf("log level should match %q is %q", LevelDebug.String(), GetLevel())
 	}
+
+	write := Writer()
+	if write != os.Stderr {
+		t.Error("log writer should match os.stderr")
+	}
+}
+
+func TestOutput(t *testing.T) {
+	const testString = "test"
+	var actual bytes.Buffer
+	l := New(&actual, "")
+	l.Infof(testString)
+
+	mastEqual(t, expectlog(LevelInfo, "", "", 1, testString), actual.String())
+
+	l.ResetID()
+}
+
+func TestMustGetLogger(t *testing.T) {
+	SetPrefix("")
+	SetLevel(LevelInfo)
+	l := MustGetLogger("1")
+
+	const testString = "log message"
+	var actual bytes.Buffer
+	l.SetOutput(&actual)
+
+	l.Infoln(testString)
+	mastEqual(t, expectlog(LevelInfo, "1", "", 1, testString), actual.String())
+
+	actual.Reset()
+	l = l.MustGetLogger("2")
+	l.Infoln(testString)
+	mastEqual(t, expectlog(LevelInfo, "1.2", "", 2, testString), actual.String())
+
+	l.ResetID()
 }
 
 func TestErrorLevel(t *testing.T) {
-	const testString = "test"
-	var b bytes.Buffer
-	l := New(&b, "glog")
+	const testString = "log message"
+	var actual bytes.Buffer
+	l := New(&actual, "glog")
 	l.SetLevel(LevelError)
 
 	l.Debuf(testString)
-	if b.String() != "" {
-		t.Errorf("log error level should match %q is %q", "", b.String())
-	}
+	mastEqual(t, "", actual.String())
 
-	b.Reset()
+	l.Debuln(testString)
+	mastEqual(t, "", actual.String())
 
 	l.Infof(testString)
-	if b.String() != "" {
-		t.Errorf("log error level should match %q is %q", "", b.String())
-	}
+	mastEqual(t, "", actual.String())
 
-	b.Reset()
+	l.Infoln(testString)
+	mastEqual(t, "", actual.String())
 
 	l.Warnf(testString)
-	if b.String() != "" {
-		t.Errorf("log error level should match %q is %q", "", b.String())
-	}
+	mastEqual(t, "", actual.String())
 
-	b.Reset()
+	l.Warnln(testString)
+	mastEqual(t, "", actual.String())
 
 	l.Errof(testString)
-	now := time.Now().Format(timeFormat)
-	expect := "\x1b[0;0;31m" + now + " [glog]" + " -> " + "ERRO" + " 002 " + testString + "\x1b[0m\n"
-	if b.String() != expect {
-		t.Errorf("log error level should match %q is %q", expect, b.String())
-	}
+	mastEqual(t, expectlog(LevelError, "glog", "", 1, testString), actual.String())
+
+	actual.Reset()
+	l.Erroln(testString)
+	mastEqual(t, expectlog(LevelError, "glog", "", 2, testString), actual.String())
+
+	l.ResetID()
 }
 
 func TestWarningLevel(t *testing.T) {
-	const testString = "test"
-	var b bytes.Buffer
-	l := New(&b, "glog")
+	const testString = "log message"
+	var actual bytes.Buffer
+	l := New(&actual, "glog")
 	l.SetLevel(LevelWarning)
 
 	l.Debuf(testString)
-	if b.String() != "" {
-		t.Errorf("log warning level should match %q is %q", "", b.String())
-	}
+	mastEqual(t, "", actual.String())
 
-	b.Reset()
+	l.Debuln(testString)
+	mastEqual(t, "", actual.String())
 
 	l.Infof(testString)
-	if b.String() != "" {
-		t.Errorf("log warning level should match %q is %q", "", b.String())
-	}
+	mastEqual(t, "", actual.String())
 
-	b.Reset()
+	l.Infoln(testString)
+	mastEqual(t, "", actual.String())
 
 	l.Warnf(testString)
-	now := time.Now().Format(timeFormat)
-	expect := "\x1b[0;0;33m" + now + " [glog]" + " -> " + "WARN" + " 003 " + testString + "\x1b[0m\n"
-	if b.String() != expect {
-		t.Errorf("log warning level should match %q is %q\n", expect, b.String())
-	}
+	mastEqual(t, expectlog(LevelWarning, "glog", "", 1, testString), actual.String())
 
-	b.Reset()
+	actual.Reset()
+	l.Warnln(testString)
+	mastEqual(t, expectlog(LevelWarning, "glog", "", 2, testString), actual.String())
 
+	actual.Reset()
 	l.Errof(testString)
-	now = time.Now().Format(timeFormat)
-	expect = "\x1b[0;0;31m" + now + " [glog]" + " -> " + "ERRO" + " 004 " + testString + "\x1b[0m\n"
-	if b.String() != expect {
-		t.Errorf("log warning level should match %q is %q\n", expect, b.String())
-	}
+	mastEqual(t, expectlog(LevelError, "glog", "", 3, testString), actual.String())
+
+	actual.Reset()
+	l.Erroln(testString)
+	mastEqual(t, expectlog(LevelError, "glog", "", 4, testString), actual.String())
+
+	l.ResetID()
 }
 
 func TestInfoLevel(t *testing.T) {
-	const testString = "test"
-	var b bytes.Buffer
-	l := New(&b, "glog")
+	const testString = "log message"
+	var actual bytes.Buffer
+	l := New(&actual, "glog")
 	l.SetLevel(LevelInfo)
 
 	l.Debuf(testString)
-	if b.String() != "" {
-		t.Errorf("log warning level should match %q is %q", "", b.String())
-	}
+	mastEqual(t, "", actual.String())
 
-	b.Reset()
+	l.Debuln(testString)
+	mastEqual(t, "", actual.String())
 
 	l.Infof(testString)
-	now := time.Now().Format(timeFormat)
-	expect := "\x1b[0;0;32m" + now + " [glog]" + " -> " + "INFO" + " 005 " + testString + "\x1b[0m\n"
-	if b.String() != expect {
-		t.Errorf("log info level should match %q is %q", expect, b.String())
-	}
+	mastEqual(t, expectlog(LevelInfo, "glog", "", 1, testString), actual.String())
 
-	b.Reset()
+	actual.Reset()
+	l.Infoln(testString)
+	mastEqual(t, expectlog(LevelInfo, "glog", "", 2, testString), actual.String())
 
+	actual.Reset()
 	l.Warnf(testString)
-	now = time.Now().Format(timeFormat)
-	expect = "\x1b[0;0;33m" + now + " [glog]" + " -> " + "WARN" + " 006 " + testString + "\x1b[0m\n"
-	if b.String() != expect {
-		t.Errorf("log info level should match %q is %q\n", expect, b.String())
-	}
+	mastEqual(t, expectlog(LevelWarning, "glog", "", 3, testString), actual.String())
 
-	b.Reset()
+	actual.Reset()
+	l.Warnln(testString)
+	mastEqual(t, expectlog(LevelWarning, "glog", "", 4, testString), actual.String())
 
+	actual.Reset()
 	l.Errof(testString)
-	now = time.Now().Format(timeFormat)
-	expect = "\x1b[0;0;31m" + now + " [glog]" + " -> " + "ERRO" + " 007 " + testString + "\x1b[0m\n"
-	if b.String() != expect {
-		t.Errorf("log info level should match %q is %q\n", expect, b.String())
-	}
+	mastEqual(t, expectlog(LevelError, "glog", "", 5, testString), actual.String())
+
+	actual.Reset()
+	l.Erroln(testString)
+	mastEqual(t, expectlog(LevelError, "glog", "", 6, testString), actual.String())
+
+	l.ResetID()
 }
 
 func TestDebugLevel(t *testing.T) {
-	const testString = "test"
-	var b bytes.Buffer
-	SetOutput(&b)
-	SetPrefix("glog")
-	SetLevel(LevelDebug)
+	const testString = "log message"
+	var actual bytes.Buffer
+	l := New(&actual, "glog")
+	l.SetLevel(LevelDebug)
 
-	Debuf(testString)
-	now := time.Now().Format(timeFormat)
-	expect := "\x1b[0;0;34m" + now + " [glog] " + "TestDebugLevel" + " -> " + "DEBU" + " 008 " + testString + "\x1b[0m\n"
-	if b.String() != expect {
-		t.Errorf("log debug level should match %q is %q", expect, b.String())
-	}
+	l.Debuf(testString)
+	mastEqual(t, expectlog(LevelDebug, "glog", "TestDebugLevel", 1, testString), actual.String())
 
-	b.Reset()
+	actual.Reset()
+	l.Debuln(testString)
+	mastEqual(t, expectlog(LevelDebug, "glog", "TestDebugLevel", 2, testString), actual.String())
 
-	Infof(testString)
-	now = time.Now().Format(timeFormat)
-	expect = "\x1b[0;0;32m" + now + " [glog] " + "TestDebugLevel" + " -> " + "INFO" + " 009 " + testString + "\x1b[0m\n"
-	if b.String() != expect {
-		t.Errorf("log debug level should match %q is %q", expect, b.String())
-	}
+	actual.Reset()
+	l.Infof(testString)
+	mastEqual(t, expectlog(LevelInfo, "glog", "TestDebugLevel", 3, testString), actual.String())
 
-	b.Reset()
+	actual.Reset()
+	l.Infoln(testString)
+	mastEqual(t, expectlog(LevelInfo, "glog", "TestDebugLevel", 4, testString), actual.String())
 
-	Warnf(testString)
-	now = time.Now().Format(timeFormat)
-	expect = "\x1b[0;0;33m" + now + " [glog] " + "TestDebugLevel" + " -> " + "WARN" + " 00a " + testString + "\x1b[0m\n"
-	if b.String() != expect {
-		t.Errorf("log debug level should match %q is %q\n", expect, b.String())
-	}
+	actual.Reset()
+	l.Warnf(testString)
+	mastEqual(t, expectlog(LevelWarning, "glog", "TestDebugLevel", 5, testString), actual.String())
 
-	b.Reset()
+	actual.Reset()
+	l.Warnln(testString)
+	mastEqual(t, expectlog(LevelWarning, "glog", "TestDebugLevel", 6, testString), actual.String())
 
-	Errof(testString)
-	now = time.Now().Format(timeFormat)
-	expect = "\x1b[0;0;31m" + now + " [glog] " + "TestDebugLevel" + " -> " + "ERRO" + " 00b " + testString + "\x1b[0m\n"
-	if b.String() != expect {
-		t.Errorf("log debug level should match %q is %q\n", expect, b.String())
-	}
+	actual.Reset()
+	l.Errof(testString)
+	mastEqual(t, expectlog(LevelError, "glog", "TestDebugLevel", 7, testString), actual.String())
+
+	actual.Reset()
+	l.Erroln(testString)
+	mastEqual(t, expectlog(LevelError, "glog", "TestDebugLevel", 8, testString), actual.String())
+
+	l.ResetID()
 }
 
 func TestLoggerID(t *testing.T) {
-	const testString = "test"
-
-	ResetID()
-
-	for i := 0; i < 450000; i++ {
-		Infof(testString)
+	np, err := os.Open(os.DevNull)
+	if err != nil {
+		t.Fatalf("open %s error: %s", os.DevNull, err)
 	}
 
-	if ID() != 450000 {
-		t.Errorf("log globalID should match %v is %v", 100000, ID())
-	}
-}
-
-func BenchmarkStdLog(b *testing.B) {
-	const testString = "test"
-	var bf bytes.Buffer
-	log.SetOutput(&bf)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		log.Println(testString)
-	}
-}
-
-func BenchmarkGlogInfo(b *testing.B) {
-	const testString = "test"
-	var buf bytes.Buffer
-	l := New(&buf, "[glog]")
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		l.Infof(testString)
-	}
-}
-
-func BenchmarkGlogDebu(b *testing.B) {
-	const testString = "test"
-	var buf bytes.Buffer
-	l := New(&buf, "")
+	const testString = "log message"
+	l := New(np, "glog")
 	l.SetLevel(LevelDebug)
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+
+	for i := 0; i < 1234; i++ {
 		l.Infof(testString)
 	}
-}
 
-func TestExample(t *testing.T) {
-	SetLevel(LevelDebug)
-	SetPrefix("glog")
-	SetOutput(os.Stdout)
-	Infof("test")
-	Warnf("test")
-	Errof("test")
-	Debuf("test")
+	if ID() != 1234 {
+		t.Errorf("log id should match %v is %v", 1234, ID())
+	}
+
+	l.ResetID()
 }
