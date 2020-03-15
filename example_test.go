@@ -2,10 +2,9 @@ package glog
 
 import (
 	"os"
-	"testing"
 )
 
-func TestExample(t *testing.T) {
+func ExampleLogger() {
 	l := New(os.Stderr, "glog")
 	l.SetLevel(LevelDebug)
 
@@ -15,4 +14,9 @@ func TestExample(t *testing.T) {
 	l.Debuf("test example")
 
 	l.ResetID()
+	// Output:
+	//2020-03-16 00:18:39.087 CST [glog] ExampleLogger -> INFO 001 test example
+	//2020-03-16 00:18:39.087 CST [glog] ExampleLogger -> WARN 002 test example
+	//2020-03-16 00:18:39.087 CST [glog] ExampleLogger -> ERRO 003 test example
+	//2020-03-16 00:18:39.087 CST [glog] ExampleLogger -> DEBU 004 test example
 }

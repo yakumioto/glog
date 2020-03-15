@@ -79,12 +79,12 @@ func TestPrefixAndLevelSetting(t *testing.T) {
 func TestOutput(t *testing.T) {
 	const testString = "test"
 	var actual bytes.Buffer
-	l := New(&actual, "")
-	l.Infof(testString)
+	SetOutput(&actual)
+	Infof(testString)
 
-	mastEqual(t, expectlog(LevelInfo, "", "", 1, testString), actual.String())
+	mastEqual(t, expectlog(LevelInfo, "glog", "TestOutput", 1, testString), actual.String())
 
-	l.ResetID()
+	ResetID()
 }
 
 func TestMustGetLogger(t *testing.T) {
@@ -274,4 +274,41 @@ func TestLoggerID(t *testing.T) {
 	}
 
 	l.ResetID()
+}
+
+func TestStdLog(t *testing.T) {
+	const testString = "log message"
+	var actual bytes.Buffer
+	SetOutput(&actual)
+	SetLevel(LevelDebug)
+
+	Infof(testString)
+	mastEqual(t, expectlog(LevelInfo, "", "TestStdLog", 1, testString), actual.String())
+	actual.Reset()
+	Infoln(testString)
+	mastEqual(t, expectlog(LevelInfo, "", "TestStdLog", 2, testString), actual.String())
+	actual.Reset()
+
+	Warnf(testString)
+	mastEqual(t, expectlog(LevelWarning, "", "TestStdLog", 3, testString), actual.String())
+	actual.Reset()
+	Warnln(testString)
+	mastEqual(t, expectlog(LevelWarning, "", "TestStdLog", 4, testString), actual.String())
+	actual.Reset()
+
+	Errof(testString)
+	mastEqual(t, expectlog(LevelError, "", "TestStdLog", 5, testString), actual.String())
+	actual.Reset()
+	Erroln(testString)
+	mastEqual(t, expectlog(LevelError, "", "TestStdLog", 6, testString), actual.String())
+	actual.Reset()
+
+	Debuf(testString)
+	mastEqual(t, expectlog(LevelDebug, "", "TestStdLog", 7, testString), actual.String())
+	actual.Reset()
+	Debuln(testString)
+	mastEqual(t, expectlog(LevelDebug, "", "TestStdLog", 8, testString), actual.String())
+	actual.Reset()
+
+	ResetID()
 }
