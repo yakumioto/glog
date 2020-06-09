@@ -36,7 +36,13 @@ var (
 	}
 )
 
-var std = &Logger{id: &id, out: os.Stderr, level: LevelInfo, depth: 3}
+func level(level Level) *Level {
+	l := new(Level)
+	l = &level
+	return l
+}
+
+var std = &Logger{id: &id, out: os.Stderr, level: level(LevelInfo), depth: 3}
 
 func (l Level) String() string {
 	return levelName[l]
@@ -46,14 +52,14 @@ type Logger struct {
 	id     *uint64
 	mu     sync.Mutex
 	depth  int
-	level  Level
+	level  *Level
 	prefix string
 	out    io.Writer
 	buf    []byte
 }
 
 func New(out io.Writer, prefix string) *Logger {
-	return &Logger{id: &id, out: out, prefix: prefix, level: LevelInfo, depth: 2}
+	return &Logger{id: &id, out: out, prefix: prefix, level: level(LevelInfo), depth: 2}
 }
 
 func (l *Logger) formatHeader(buf *[]byte, t time.Time, fname string, level Level) {
@@ -78,7 +84,7 @@ func (l *Logger) formatHeader(buf *[]byte, t time.Time, fname string, level Leve
 		*buf = append(*buf, ' ')
 	}
 
-	if l.level == LevelDebug {
+	if *l.level == LevelDebug {
 		*buf = append(*buf, fname...)
 		*buf = append(*buf, ' ')
 	}
@@ -97,7 +103,7 @@ func (l *Logger) Output(calldepth int, level Level, s string) error {
 	now := time.Now()
 
 	fname := ""
-	if l.level == LevelDebug {
+	if *l.level == LevelDebug {
 		pc, _, _, _ := runtime.Caller(calldepth)
 		fnames := strings.Split(path.Base(runtime.FuncForPC(pc).Name()), ".")
 		fname = fnames[len(fnames)-1]
@@ -156,49 +162,49 @@ func (l *Logger) Fatalf(format string, v ...interface{}) {
 }
 
 func (l *Logger) Erroln(v ...interface{}) {
-	if l.level >= LevelError {
+	if *l.level >= LevelError {
 		l.Output(l.depth, LevelError, fmt.Sprintln(v...))
 	}
 }
 
 func (l *Logger) Errof(format string, v ...interface{}) {
-	if l.level >= LevelError {
+	if *l.level >= LevelError {
 		l.Output(l.depth, LevelError, fmt.Sprintf(format, v...))
 	}
 }
 
 func (l *Logger) Warnln(v ...interface{}) {
-	if l.level >= LevelWarning {
+	if *l.level >= LevelWarning {
 		l.Output(l.depth, LevelWarning, fmt.Sprintln(v...))
 	}
 }
 
 func (l *Logger) Warnf(format string, v ...interface{}) {
-	if l.level >= LevelWarning {
+	if *l.level >= LevelWarning {
 		l.Output(l.depth, LevelWarning, fmt.Sprintf(format, v...))
 	}
 }
 
 func (l *Logger) Infoln(v ...interface{}) {
-	if l.level >= LevelInfo {
+	if *l.level >= LevelInfo {
 		l.Output(l.depth, LevelInfo, fmt.Sprintln(v...))
 	}
 }
 
 func (l *Logger) Infof(format string, v ...interface{}) {
-	if l.level >= LevelInfo {
+	if *l.level >= LevelInfo {
 		l.Output(l.depth, LevelInfo, fmt.Sprintf(format, v...))
 	}
 }
 
 func (l *Logger) Debuln(v ...interface{}) {
-	if l.level >= LevelDebug {
+	if *l.level >= LevelDebug {
 		l.Output(l.depth, LevelDebug, fmt.Sprintln(v...))
 	}
 }
 
 func (l *Logger) Debuf(format string, v ...interface{}) {
-	if l.level >= LevelDebug {
+	if *l.level >= LevelDebug {
 		l.Output(l.depth, LevelDebug, fmt.Sprintf(format, v...))
 	}
 }
@@ -283,5 +289,5 @@ func (l *Logger) SetLevel(level Level) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	l.level = level
+	*l.level = level
 }
